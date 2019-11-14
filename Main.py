@@ -15,6 +15,9 @@ labelData = pd.read_csv('C:\\Users\\MichaelK\\Documents\\SeniorDesign\\activity_
 #combines all data into one file, correlating accel and gyro time values and applying a label to every entry
 #inputs - 3 dataframes containing info from accelerometer, gyroscope, and activity
 #output - dataframe containing combined info with correlated datapoints
+
+# !!! This function can take hours to run depending on the system being used !!!
+#save the resulting dataframe to a file after running so it doesnt need to be used twice on the same data
 def combine_data(accelData, gyroData, labelData):
     outData = pd.DataFrame(columns = ['Time','aX','aY','aZ','gX','gY','gZ','Activity'])
     #instantiating variables
@@ -31,9 +34,10 @@ def combine_data(accelData, gyroData, labelData):
         for i in range(labelIndex,labelData['Time'].count()-1):
             labelTime = datetime.strptime(labelData['Time'][i], '%m/%d/%y %H:%M:%S')
             #print(labelTime, accelTime)
-            if labelTime < accelTime:
+            if labelTime < accelTime: #This works due to the format of the activity data file
                 labelIndex = i
                 currentLabel = labelData['Activity'][i]
+                #According to Ali, NULL and unanswered can be interpreted as whatever the most recent label is
                 if currentLabel == 'NULL' or currentLabel == 'Unanswered':
                     currentLabel = oldLabel
             else:
@@ -44,16 +48,17 @@ def combine_data(accelData, gyroData, labelData):
         if oldLabel != currentLabel:
             print('Current Label: ' + currentLabel)
         '''
-        oldLabel = currentLabel
+        oldLabel = currentLabel #used when NULL or Unanswered is encountered
 
-        #correlating accel and gyro times
+        #Saving the current gyroscope timestamp as a datetime object
         gyroTime = datetime.strptime(gyroData['Time'][gyroIndex], '%m/%d/%y %H:%M:%S.%f')
+
 
         if gyroIndex < gyroData['Time'].count()-1: #Preventing out of bounds
             nextGyroTime = datetime.strptime(gyroData['Time'][gyroIndex + 1], '%m/%d/%y %H:%M:%S.%f')
-            while abs(accelTime-gyroTime) > abs(accelTime-nextGyroTime):
+            while abs(accelTime-gyroTime) > abs(accelTime-nextGyroTime): #location in gyroscope data never needs to decrement
                 gyroIndex += 1
-                if gyroIndex == gyroData['Time'].count()-1:
+                if gyroIndex == gyroData['Time'].count()-1: #if we get to the last datapoint in gyro
                     break
                 gyroTime = datetime.strptime(gyroData['Time'][gyroIndex], '%m/%d/%y %H:%M:%S.%f')
                 nextGyroTime = datetime.strptime(gyroData['Time'][gyroIndex + 1], '%m/%d/%y %H:%M:%S.%f')
@@ -113,6 +118,7 @@ def remove_outliers_df(df, devs):
 
 
 #defining variables for feature extraction
+#these values may be modified to improve FFT generation
 t_n = 0.1
 N = 1000
 T = t_n / N
@@ -120,6 +126,9 @@ f_s = 1/T
 
 
 #this function finds frequency from time for a chunk of data
+#input - chunk (dataFrame)
+#output - outData (dataFrame) containing frequency and fft values for all sensors and axis
+#code from http://ataspinar.com/2018/04/04/machine-learning-with-signal-processing-techniques/
 def get_fft_values(chunk):
     f_values = np.linspace(0.0, 1.0/(2.0*T), N//2)
     fft_ax_ = fft(chunk['aX'])
@@ -141,16 +150,18 @@ def get_fft_values(chunk):
     outData = outData.reset_index(drop=True)
     return outData
 
-
-# In[32]:
-
-
+#plots data against time for a column in a dataset
+#inputs - df (dataFrame), col (String)
+#output - plot
 def plot_axis(df, col):
+    #determining sensor and axis from col
     if col[0] == 'g': sensor = 'gyroscope '
     else: sensor = 'accelerometer '
     if col[1] == 'X': axis = 'X axis'
     elif col[1] == 'Y': axis = 'Y axis'
     else: axis = 'Z axis'
+
+    #plot the amplitude angainst the frequency
     plt.plot(df['Frequency'], df[col], linestyle='-', color='blue')
     plt.xlabel('Frequency [Hz]', fontsize=16)
     plt.ylabel('Amplitude', fontsize=16)
@@ -159,18 +170,14 @@ def plot_axis(df, col):
     return
 
 
-# In[36]:
-
-
+#work in progress
 def autocorr(col):
     result = []
     result = np.correlate(col, col, mode='full')
     return result[len(result)//2:]
 
 
-# In[37]:
-
-
+#uses autocorr function to produce array of correlation values
 def get_autocorr_values(df, T, N, f_s):
     for key, value in df.iteritems():
         if key != 'Time' and key != 'Activity':
@@ -179,12 +186,11 @@ def get_autocorr_values(df, T, N, f_s):
     return x_values, autocorr_values
 
 
-# In[117]:
-
 
 #function produced as a modification of code written by basj on stack overflow
 #https://stackoverflow.com/questions/1713335/peak-finding-algorithm-for-python-scipy
-
+#inputs - df (dataFrame), col (String), cnt (Int) - cnt is the number of peaks to identify
+#output - plot
 def peak_detection(df, col, cnt):
     x = df[col]
     prom = 10
@@ -197,14 +203,28 @@ def peak_detection(df, col, cnt):
     return
 
 
-# In[29]:
+#splits a main dataFrame into subset based on the activity label
+#input - df (dataFrame)
+#output - outList (list) of (dataFrame)
+def split_activities(df):
+    outList = []
+    activityList = []
+    for activity in df['Activity']: #creating a list of activities
+        exists = False
+        for i in activityList:
+            if activity == i:
+                exists = True
+        if not exists:
+            activityList.append(activity)
+    for i in activityList: #seperating main dataframe by activity
+        outList.append(df[df['Activity'] == i].reset_index(drop=True))
+    return outList
 
-
+#only use once per input data set - correlates the data
+'''
 allData = combine_data(accelData,gyroData,labelData)
 allData.to_csv('allData.csv')
-
-
-# In[8]:
+'''
 
 
 #importing saved compiled data to avoid running combine_data
@@ -213,63 +233,20 @@ allData = allData.drop(columns = 'Unnamed: 0')
 allData.describe()
 
 
-# In[9]:
+#seperates the main data by activity
+activityDfList = split_activities(allData)
 
-
-labworkData = allData[allData['Activity'] == 'Work In Lab'].reset_index(drop=True)
-walkingData = allData[allData['Activity'] == 'Walking'].reset_index(drop=True)
-runningData = allData[allData['Activity'] == 'Running'].reset_index(drop=True)
-drivingData = allData[allData['Activity'] == 'Driving'].reset_index(drop=True)
-relaxingData = allData[allData['Activity'] == 'Relaxing'].reset_index(drop=True)
-eatingData = allData[allData['Activity'] == 'Eating'].reset_index(drop=True)
-unlistedData = allData[allData['Activity'] == 'Not in List'].reset_index(drop=True)
-activityDfList = [labworkData,walkingData,runningData,drivingData,relaxingData,eatingData,unlistedData]
-
-
-# In[92]:
-
-
+#removes outlying datapoints from each activity
 prunedDataList = []
 for df in activityDfList:
     if df['Activity'].iloc[1] != 'Work In Lab' and df['Activity'].iloc[1] != 'Not in List':
         prunedDataList.append(remove_outliers_df(df))
 
 
-# In[11]:
-
-
+#test code
 chunkedData = chunk(prunedDataList[3])
-
-
-# In[12]:
-
 
 chunkedData[0].describe()
 
-
-# In[70]:
-
-
 fftData = get_fft_values(chunkedData[0])
 fftData.head()
-
-
-# In[37]:
-
-
-chunkedData[0]
-
-
-# In[114]:
-
-
-peak_detection(fftData, 'gX', 6)
-
-
-# In[115]:
-
-
-peak_detection(fftData, 'gZ', 12)
-
-
-# In[ ]:
