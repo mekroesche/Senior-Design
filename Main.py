@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
+import pickle
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from scipy.fftpack import fft
 from scipy.signal import find_peaks
-
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.datasets import make_classification
 
 #import the raw data for accelerometer, gyroscope, and labels
 accelData = pd.read_csv('C:\\Users\\MichaelK\\Documents\\SeniorDesign\\accelerometer_data.txt')
@@ -96,9 +98,6 @@ def remove_outliers_col(df,col, devs): #input dataframe and column name (string)
         df = df.drop(df[col].idxmin())
     df.head()
     return df #returns the modified dataframe
-
-
-# In[6]:
 
 
 #This function uses remove_outliers_col remove outliers from every column in a dataframe
@@ -220,17 +219,18 @@ def split_activities(df):
         outList.append(df[df['Activity'] == i].reset_index(drop=True))
     return outList
 
+###############################################################################
+
+try:
+    #importing saved compiled data to avoid running combine_data
+    allData = pd.read_csv('allData.csv')
+    allData = allData.drop(columns = 'Unnamed: 0')
+    allData.describe()
+
 #only use once per input data set - correlates the data
-'''
-allData = combine_data(accelData,gyroData,labelData)
-allData.to_csv('allData.csv')
-'''
-
-
-#importing saved compiled data to avoid running combine_data
-allData = pd.read_csv('allData.csv')
-allData = allData.drop(columns = 'Unnamed: 0')
-allData.describe()
+except: #if there is not an allData file saved
+    allData = combine_data(accelData,gyroData,labelData)
+    allData.to_csv('allData.csv')
 
 
 #seperates the main data by activity
@@ -240,7 +240,7 @@ activityDfList = split_activities(allData)
 prunedDataList = []
 for df in activityDfList:
     if df['Activity'].iloc[1] != 'Work In Lab' and df['Activity'].iloc[1] != 'Not in List':
-        prunedDataList.append(remove_outliers_df(df))
+        prunedDataList.append(remove_outliers_df(df, 4))
 
 
 #test code
@@ -248,5 +248,19 @@ chunkedData = chunk(prunedDataList[3])
 
 chunkedData[0].describe()
 
+#getting frequency from time values
 fftData = get_fft_values(chunkedData[0])
 fftData.head()
+
+
+#Creating a simple model - still need to set up correct feature storage and implementation
+noLabelData = allData.drop(['Time','Activity'],axis = 1)
+clf = RandomForestClassifier(n_estimators=1000, max_depth=3,random_state=0)
+clf.fit(noLabelData, allData['Activity'])
+
+#pickling the model so it can be transfered to the phone
+model = pickle.dumps(clf)
+
+#writing the model to a text file
+modelFile = open('seniodDesignModel.txt','wb')
+modelFile.write(model)
