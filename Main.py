@@ -252,18 +252,31 @@ def get_psd_values(chunk, T, N, f_s):
 
 #work in progress
 def extract_features(dfList):
+    columnList = []
+    for i in range(72):
+        columnList.append('Feature ' + str(i))
+    outData = pd.DataFrame(columns = columnList)
+
     for df in dfList:
         chunkList = chunk_data(df)
+        print(len(chunkList))
+        i = 0
         for chunk in chunkList:
-            print(len(chunk))
+            print(i)
             fftData = get_fft_values(chunk)
             psdData = get_psd_values(chunk)
             corData = get_autocorr_values(chunk)
+            featNum = 0
+            outInfo = {}
             for key, value in fftData.iteritems():
-                print(key)
                 if key != 'Frequency' and key != 'Activity':
-                    print(peak_detection(fftData, key, 6, False))
-    return
+                    fftPks = peak_detection(fftData, key, 6, 1, False)[0:6]
+                    psdPks = peak_detection(psdData, key, 6, 1, False)[0:6]
+                    for j in range(6):
+                        outInfo.update([('Feature '+featNum,fftPks[j]),('Feature '+featNum+1,psdPks[j])])
+                        featNum += 2
+            i += 1
+    return outData
 
 ###############################################################################
 
