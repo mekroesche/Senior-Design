@@ -82,7 +82,7 @@ def chunk(df): #input dataframe
         tempChunk = df.iloc[i*1000:i*1000+1000] #normal chunks
         chunkList.append(tempChunk)
         if i*1000+1500 <= len(df.index):
-            tempChunk = df.iloc[i*1000 - 500:i*1000+1500] #offset chunks
+            tempChunk = df.iloc[i*1000 + 500:i*1000+1500] #offset chunks
             chunkList.append(tempChunk)
     return chunkList
 
@@ -181,7 +181,7 @@ def autocorr(col):
 #derived from a function by Ahmet Taspinar
 #http://ataspinar.com/2018/04/04/machine-learning-with-signal-processing-techniques/
 def get_autocorr_values(df, T, N, f_s):
-    x_values = np.array([T * jj for jj in range(0, N//2)])
+    x_values = np.array([T * jj for jj in range(0, N)])
     outData = pd.DataFrame(columns = ['x_values','aX','aY','aZ','gX','gY','gZ'])
     outData['x_values'] = x_values
     for key, value in df.iteritems():
@@ -253,9 +253,16 @@ def get_psd_values(chunk, T, N, f_s):
 #work in progress
 def extract_features(dfList):
     for df in dfList:
-        chunkList = chunk(df)
+        chunkList = chunk_data(df)
         for chunk in chunkList:
+            print(len(chunk))
             fftData = get_fft_values(chunk)
+            psdData = get_psd_values(chunk)
+            corData = get_autocorr_values(chunk)
+            for key, value in fftData.iteritems():
+                print(key)
+                if key != 'Frequency' and key != 'Activity':
+                    print(peak_detection(fftData, key, 6, False))
     return
 
 ###############################################################################
