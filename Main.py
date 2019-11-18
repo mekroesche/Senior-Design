@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from scipy.fftpack import fft
 from scipy.signal import find_peaks
+from scipy.signal import welch
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.datasets import make_classification
 
@@ -203,11 +204,11 @@ def peak_detection(df, col, cnt, plot):
     elif col[1] == 'Y': axis = 'Y axis'
     else: axis = 'Z axis'
     x = df[col]
-    prom = 10 #using prominence to find peaks
-    peaks2, _ = find_peaks(x, prominence=prom)
+    prom = 10 #using prominence to find peaks - distance ensures peaks arent too close together
+    peaks2, _ = find_peaks(x, prominence=prom,distance = 10)
     while len(peaks2) < cnt: #reducing prominence until correct amount of peaks is reached
         prom -= 0.00025
-        peaks2, _ = find_peaks(x, prominence=prom)
+        peaks2, _ = find_peaks(x, prominence=prom,distance = 10)
 
     if plot: #if the user wants to plot the results
         plt.plot(peaks2, x[peaks2], "ob"); plt.plot(x); plt.legend(['peaks'])
