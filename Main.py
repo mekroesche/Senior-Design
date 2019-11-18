@@ -177,29 +177,43 @@ def autocorr(col):
 
 
 #uses autocorr function to produce array of correlation values
+#derived from a function by Ahmet Taspinar
+#http://ataspinar.com/2018/04/04/machine-learning-with-signal-processing-techniques/
 def get_autocorr_values(df, T, N, f_s):
+    x_values = np.array([T * jj for jj in range(0, N//2)])
+    outData = pd.DataFrame(columns = ['x_values','aX','aY','aZ','gX','gY','gZ'])
+    outData['x_values'] = x_values
     for key, value in df.iteritems():
         if key != 'Time' and key != 'Activity':
-            autocorr_values = autocorr(df[key])
-            x_values = np.array([T * jj for jj in range(0, N)])
-    return x_values, autocorr_values
+            outData[key] = autocorr(df[key])
+
+    return outData
 
 
 
 #function produced as a modification of code written by basj on stack overflow
 #https://stackoverflow.com/questions/1713335/peak-finding-algorithm-for-python-scipy
-#inputs - df (dataFrame), col (String), cnt (Int) - cnt is the number of peaks to identify
+#inputs - df (dataFrame), col (String), cnt (Int) - cnt is the number of peaks to identify, plt (Boolean)
 #output - plot
-def peak_detection(df, col, cnt):
+def peak_detection(df, col, cnt, plot):
+    #determining sensor and axis from col
+    if col[0] == 'g': sensor = 'gyroscope '
+    else: sensor = 'accelerometer '
+    if col[1] == 'X': axis = 'X axis'
+    elif col[1] == 'Y': axis = 'Y axis'
+    else: axis = 'Z axis'
     x = df[col]
-    prom = 10
+    prom = 10 #using prominence to find peaks
     peaks2, _ = find_peaks(x, prominence=prom)
-    while len(peaks2) < cnt:
-        prom -= 0.005
+    while len(peaks2) < cnt: #reducing prominence until correct amount of peaks is reached
+        prom -= 0.00025
         peaks2, _ = find_peaks(x, prominence=prom)
-    plt.plot(peaks2, x[peaks2], "ob"); plt.plot(x); plt.legend(['peaks'])
-    plt.show()
-    return
+
+    if plot: #if the user wants to plot the results
+        plt.plot(peaks2, x[peaks2], "ob"); plt.plot(x); plt.legend(['peaks'])
+        plt.title("Peak Detection for the " + sensor + axis, fontsize=16)
+        plt.show()
+    return x[peaks2]
 
 
 #splits a main dataFrame into subset based on the activity label
@@ -218,6 +232,30 @@ def split_activities(df):
     for i in activityList: #seperating main dataframe by activity
         outList.append(df[df['Activity'] == i].reset_index(drop=True))
     return outList
+
+
+#Extracts the power spectral density from each column in a given chunk
+#derived from a function by Ahmet Taspinar
+#http://ataspinar.com/2018/04/04/machine-learning-with-signal-processing-techniques/
+def get_psd_values(chunk, T, N, f_s):
+    f_values, psd_aX = welch(chunk['aX'], fs=f_s)
+    f_values, psd_aY = welch(chunk['aY'], fs=f_s)
+    f_values, psd_aZ = welch(chunk['aZ'], fs=f_s)
+    f_values, psd_gX = welch(chunk['gX'], fs=f_s)
+    f_values, psd_gY = welch(chunk['gY'], fs=f_s)
+    f_values, psd_gZ = welch(chunk['gZ'], fs=f_s)
+    outInfo = {'Frequency':f_values,'aX':psd_aX,'aY':psd_aY,'aZ':psd_aZ,'gX':psd_gX,'gY':psd_gY,'gZ':psd_gZ}
+    outData = pd.DataFrame(outInfo)
+    return outData
+
+
+#work in progress
+def extract_features(dfList):
+    for df in dfList:
+        chunkList = chunk(df)
+        for chunk in chunkList:
+            fftData = get_fft_values(chunk)
+    return
 
 ###############################################################################
 
@@ -264,3 +302,6 @@ model = pickle.dumps(clf)
 #writing the model to a text file
 modelFile = open('seniodDesignModel.txt','wb')
 modelFile.write(model)
+
+psdData = get_psd_values(chunkedData[0], T, N, f_s)
+psdData.head()
