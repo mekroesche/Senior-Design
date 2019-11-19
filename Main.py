@@ -41,16 +41,16 @@ def combine_data(accelData, gyroData, labelData):
                 labelIndex = i
                 currentLabel = labelData['Activity'][i]
                 #According to Ali, NULL and unanswered can be interpreted as whatever the most recent label is
-                if currentLabel == 'NULL' or currentLabel == 'Unanswered':
+                if currentLabel == 'NULL' or currentLabel == 'Unanswered' or currentLabel == 'No Change':
                     currentLabel = oldLabel
             else:
                 break
 
         #test print -- uncomment this to ensure the function is working if it takes too long
-        '''
+
         if oldLabel != currentLabel:
             print('Current Label: ' + currentLabel)
-        '''
+
         oldLabel = currentLabel #used when NULL or Unanswered is encountered
 
         #Saving the current gyroscope timestamp as a datetime object
@@ -75,13 +75,21 @@ def combine_data(accelData, gyroData, labelData):
 #splits a dataframe into 1000 entry dataframes with 50% overlap
 #inputs - df (dataframe)
 #outputs - chunkList (list) of (dataframe)
-def chunk(df): #input dataframe
+def chunk_data(df): #input dataframe
     chunkCount = len(df.index)//1000 #determining the amount of adjacent chunks that will fit
     chunkList = []
+    if chunkCount == 1: #properly handling the case where the data is too short for many chunks
+        chunk1 = df.iloc[0:1000] #place one on each end so they overlap in the middle and all data
+        chunk2 = df.iloc[-1000:] #points are used
+        chunkList.append(chunk1)
+        chunkList.append(chunk2)
+        return chunkList #no need for the loop if this happens
+    elif chunkCount == 0: #if there are not enough datapoints to produce a chunk
+        return #nothing to return
     for i in range(chunkCount-1):
         tempChunk = df.iloc[i*1000:i*1000+1000] #normal chunks
         chunkList.append(tempChunk)
-        if i*1000+1500 <= len(df.index):
+        if i*1000+1500 <= len(df.index): #preventing out of bounds error
             tempChunk = df.iloc[i*1000 + 500:i*1000+1500] #offset chunks
             chunkList.append(tempChunk)
     return chunkList
@@ -180,7 +188,11 @@ def autocorr(col):
 #uses autocorr function to produce array of correlation values
 #derived from a function by Ahmet Taspinar
 #http://ataspinar.com/2018/04/04/machine-learning-with-signal-processing-techniques/
-def get_autocorr_values(df, T, N, f_s):
+def get_autocorr_values(df):
+    t_n = 0.1
+    N = 1000
+    T = t_n / N
+    f_s = 1/T
     x_values = np.array([T * jj for jj in range(0, N)])
     outData = pd.DataFrame(columns = ['x_values','aX','aY','aZ','gX','gY','gZ'])
     outData['x_values'] = x_values
@@ -196,7 +208,7 @@ def get_autocorr_values(df, T, N, f_s):
 #https://stackoverflow.com/questions/1713335/peak-finding-algorithm-for-python-scipy
 #inputs - df (dataFrame), col (String), cnt (Int) - cnt is the number of peaks to identify, plt (Boolean)
 #output - plot
-def peak_detection(df, col, cnt, plot):
+def peak_detection(df, col, cnt, dist, plot):
     #determining sensor and axis from col
     if col[0] == 'g': sensor = 'gyroscope '
     else: sensor = 'accelerometer '
@@ -204,11 +216,11 @@ def peak_detection(df, col, cnt, plot):
     elif col[1] == 'Y': axis = 'Y axis'
     else: axis = 'Z axis'
     x = df[col]
-    prom = 10 #using prominence to find peaks - distance ensures peaks arent too close together
-    peaks2, _ = find_peaks(x, prominence=prom,distance = 10)
+    prom = 10 #using prominence to find peaks
+    peaks2, _ = find_peaks(x, prominence=prom, distance = dist)
     while len(peaks2) < cnt: #reducing prominence until correct amount of peaks is reached
         prom -= 0.00025
-        peaks2, _ = find_peaks(x, prominence=prom,distance = 10)
+        peaks2, _ = find_peaks(x, prominence=prom, distance = dist)
 
     if plot: #if the user wants to plot the results
         plt.plot(peaks2, x[peaks2], "ob"); plt.plot(x); plt.legend(['peaks'])
@@ -238,7 +250,11 @@ def split_activities(df):
 #Extracts the power spectral density from each column in a given chunk
 #derived from a function by Ahmet Taspinar
 #http://ataspinar.com/2018/04/04/machine-learning-with-signal-processing-techniques/
-def get_psd_values(chunk, T, N, f_s):
+def get_psd_values(chunk):
+    t_n = 0.1
+    N = 1000
+    T = t_n / N
+    f_s = 1/T
     f_values, psd_aX = welch(chunk['aX'], fs=f_s)
     f_values, psd_aY = welch(chunk['aY'], fs=f_s)
     f_values, psd_aZ = welch(chunk['aZ'], fs=f_s)
@@ -250,22 +266,25 @@ def get_psd_values(chunk, T, N, f_s):
     return outData
 
 
-#work in progress
+#this function takes a list of dataFrames divided by activity and extracts their features
+#input - dfList (List) of (DataFrame)
+#output - outData (DataFrame) with a row of features for each chunk
 def extract_features(dfList):
     columnList = []
     for i in range(72):
         columnList.append('Feature ' + str(i))
+    columnList.append('Activity')
     outData = pd.DataFrame(columns = columnList)
 
     for df in dfList:
         chunkList = chunk_data(df)
-        print(len(chunkList))
+        #print(len(chunkList))
         i = 0
         for chunk in chunkList:
-            print(i)
+            #print(i)
             fftData = get_fft_values(chunk)
             psdData = get_psd_values(chunk)
-            corData = get_autocorr_values(chunk)
+            #corData = get_autocorr_values(chunk)
             featNum = 0
             outInfo = {}
             for key, value in fftData.iteritems():
@@ -273,9 +292,12 @@ def extract_features(dfList):
                     fftPks = peak_detection(fftData, key, 6, 1, False)[0:6]
                     psdPks = peak_detection(psdData, key, 6, 1, False)[0:6]
                     for j in range(6):
-                        outInfo.update([('Feature '+featNum,fftPks[j]),('Feature '+featNum+1,psdPks[j])])
+                        outInfo.update([('Feature '+ str(featNum),fftPks.iloc[j]),('Feature '+str(featNum+1),psdPks.iloc[j])])
+                        #outInfo.update([('Feature '+ str(featNum),[fftPks.index[j],fftPks.iloc[j]]),('Feature '+str(featNum+1),[psdPks.index[j],psdPks.iloc[j]])])
                         featNum += 2
             i += 1
+            outInfo.update([('Activity',chunk['Activity'].iloc[0])])
+            outData = outData.append(outInfo,ignore_index = True)
     return outData
 
 ###############################################################################
@@ -302,27 +324,30 @@ for df in activityDfList:
         prunedDataList.append(remove_outliers_df(df, 4))
 
 
-#test code
-chunkedData = chunk(prunedDataList[3])
-
-chunkedData[0].describe()
-
-#getting frequency from time values
-fftData = get_fft_values(chunkedData[0])
-fftData.head()
-
-
-#Creating a simple model - still need to set up correct feature storage and implementation
-noLabelData = allData.drop(['Time','Activity'],axis = 1)
+#creating the model
 clf = RandomForestClassifier(n_estimators=1000, max_depth=3,random_state=0)
-clf.fit(noLabelData, allData['Activity'])
 
-#pickling the model so it can be transfered to the phone
+#extracting features for training
+trainingData = extract_features(prunedDataList[0:3])
+
+#training the model
+noLabelData = trainingData.drop(['Activity'],axis = 1)
+clf.fit(noLabelData, trainingData['Activity'])
+
+#saving the model to a file
 model = pickle.dumps(clf)
-
-#writing the model to a text file
 modelFile = open('seniodDesignModel.txt','wb')
 modelFile.write(model)
 
-psdData = get_psd_values(chunkedData[0], T, N, f_s)
-psdData.head()
+#import the test data for accelerometer, gyroscope, and labels
+testAccelData = pd.read_csv('C:\\Users\\Micha\\Documents\\SeniorDesign\\testdata\\accelerometer_data (1).txt')
+testGyroData = pd.read_csv('C:\\Users\\Micha\\Documents\\SeniorDesign\\testdata\\gyroscope_data (1).txt')
+testLabelData = pd.read_csv('C:\\Users\\Micha\\Documents\\SeniorDesign\\testdata\\activity_data (1).txt', keep_default_na=False)
+
+rawTestData = combine_data(testAccelData,testGyroData,testLabelData)
+testDfList = split_activities(rawTestData)
+#removes outlying datapoints from each activity
+prunedTestData = []
+for df in testDfList:
+    if df['Activity'].iloc[1] != 'Work In Lab' and df['Activity'].iloc[1] != 'Not in List':
+        prunedTestList.append(remove_outliers_df(df, 4))
