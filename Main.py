@@ -8,6 +8,7 @@ from scipy.signal import find_peaks
 from scipy.signal import welch
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.datasets import make_classification
+import sklearn2pmml
 
 #import the raw data for accelerometer, gyroscope, and labels
 accelData = pd.read_csv('C:\\Users\\MichaelK\\Documents\\SeniorDesign\\accelerometer_data.txt')
@@ -177,8 +178,9 @@ def plot_axis(df, col):
     plt.show()
     return
 
-
-#work in progress
+#runs auto correlation on a column of data
+#inputs - col (list)
+#outputs - correlation resutl
 def autocorr(col):
     result = []
     result = np.correlate(col, col, mode='full')
@@ -263,6 +265,103 @@ def get_psd_values(chunk):
     f_values, psd_gZ = welch(chunk['gZ'], fs=f_s)
     outInfo = {'Frequency':f_values,'aX':psd_aX,'aY':psd_aY,'aZ':psd_aZ,'gX':psd_gX,'gY':psd_gY,'gZ':psd_gZ}
     outData = pd.DataFrame(outInfo)
+    return outData
+
+#finds change in acceleration for six sub chunks of a larger chunk
+#inputs - col (list)
+#outputs - col (list)
+def jerk_col(col):
+
+    jerkStart = [col[0],col[167],col[333],col[500],col[666],col[833]]
+    jerkEnd = [col[168],col[334],col[501],col[667],col[834],col[999]]
+    jerkOut = np.zeros(6)
+
+    for i in range(6):
+        jerkOut[i] = jerkStart[i]-jerkEnd[i]
+
+    return jerkOut
+
+#uses jerk_col function to find the jerk values for 6 sub chunks of each column in a chunk
+#inputs - chunk (dataFrame)
+#outputs - outData (dataFrame)
+def find_jerk(chunk):
+    outData = pd.DataFrame(columns = ['count','aX','aY','aZ','gX','gY','gZ'])
+    outData['count'] = [1,2,3,4,5,6] #outputs 6 jerk values for each sensor axis
+    for key, value in chunk.iteritems(): #itterating over the chunk's columns
+        if key != 'Time' and key != 'Activity':
+            outData[key] = jerk_col(value)
+
+    return outData
+
+#finds the amount of zero crossing points for a column of data
+#inputs - col (list)
+#outputs - timesCrossed (int)
+def zero_cross_col(col):
+    timesCrossed = [0];
+    lastVal = 0
+    for i in col:
+        if i < 0 and lastVal > 0:
+            timesCrossed[0] += 1
+        elif i > 0 and lastVal < 0:
+            timesCrossed[0] += 1
+        lastVal = i
+    return timesCrossed
+
+#uses zero_cross_col to find zero crossing points for each column in a data chunk
+#inputs - chunk (dataFrame)
+#outputs - outData (dataFrame)
+def find_zero_cross(chunk):
+    outData = pd.DataFrame(columns = ['aX','aY','aZ','gX','gY','gZ']) #dataframe will only have depth of 1
+    for key, value in chunk.iteritems(): #itterating over the chunk's columns
+        if key != 'Time' and key != 'Activity':
+            outData[key] = zero_cross_col(value)
+
+    return outData
+
+#fins mean of 6 subsections of a column of data
+#inputs - col(array)
+#outputs - meanOut (array) of 6 means
+def mean_col(col):
+    meanSum = np.zeros(6)
+    meanCount = np.zeros(6)
+    meanOut = np.zeros(6)
+    i = 0
+    while i < 1000:
+        if i < 1000/6:
+            meanSum[0] += col[i]
+            meanCount[0] += 1
+        if i < 2000/6:
+            meanSum[1] += col[i]
+            meanCount[1] += 1
+        if i < 3000/6:
+            meanSum[2] += col[i]
+            meanCount[2] += 1
+        if i < 4000/6:
+            meanSum[3] += col[i]
+            meanCount[3] += 1
+        if i < 5000/6:
+            meanSum[4] += col[i]
+            meanCount[4] += 1
+        if i < 6000/6:
+            meanSum[5] += col[i]
+            meanCount[5] += 1
+        i += 1
+
+    for j in range(6):
+        meanOut[j] = meanSum[j]/meanCount[j]
+
+    return meanOut
+
+#Uses mean_col function to find the mean values for a data chunk
+#inputs - chunk (dataFrame)
+#outputs - outData (dataFrame)
+def find_mean(chunk):
+    outData = pd.DataFrame(columns = ['count','aX','aY','aZ','gX','gY','gZ'])
+    outData['count'] = [1,2,3,4,5,6] #outputs 6 averages for each sensor axis
+    for key, value in chunk.iteritems(): #itterating over the chunk's columns
+        if key != 'Time' and key != 'Activity':
+            outData[key] = mean_col(value)
+
     return outData
 
 
