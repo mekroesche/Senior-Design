@@ -8,7 +8,8 @@ from scipy.signal import find_peaks
 from scipy.signal import welch
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.datasets import make_classification
-import sklearn2pmml
+from sklearn2pmml import PMMLPipeline
+from sklearn2pmml import sklearn2pmml
 
 #import the raw data for accelerometer, gyroscope, and labels
 accelData = pd.read_csv('C:\\Users\\MichaelK\\Documents\\SeniorDesign\\accelerometer_data.txt')
@@ -79,19 +80,19 @@ def combine_data(accelData, gyroData, labelData):
 def chunk_data(df): #input dataframe
     chunkCount = len(df.index)//1000 #determining the amount of adjacent chunks that will fit
     chunkList = []
-    if chunkCount == 1: #properly handling the case where the data is too short for many chunks
-        chunk1 = df.iloc[0:1000] #place one on each end so they overlap in the middle and all data
-        chunk2 = df.iloc[-1000:] #points are used
+    if chunkCount == 1:
+        chunk1 = df.iloc[0:1000]
+        chunk2 = df.iloc[-1000:]
         chunkList.append(chunk1)
         chunkList.append(chunk2)
-        return chunkList #no need for the loop if this happens
-    elif chunkCount == 0: #if there are not enough datapoints to produce a chunk
-        return #nothing to return
+        return chunkList
     for i in range(chunkCount-1):
         tempChunk = df.iloc[i*1000:i*1000+1000] #normal chunks
+        tempChunk.reset_index(drop = True, inplace = True)
         chunkList.append(tempChunk)
-        if i*1000+1500 <= len(df.index): #preventing out of bounds error
-            tempChunk = df.iloc[i*1000 + 500:i*1000+1500] #offset chunks
+        if i*1000+1500 <= len(df.index):
+            tempChunk = df.iloc[i*1000 + 500:i*1000+1500] #offset chunks]
+            tempChunk.reset_index(drop = True, inplace = True)
             chunkList.append(tempChunk)
     return chunkList
 
