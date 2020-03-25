@@ -90,21 +90,21 @@ def combine_data(accelData, gyroData, labelData):
 #splits a dataframe into 1000 entry dataframes with 50% overlap
 #inputs - df (dataframe)
 #outputs - chunkList (list) of (dataframe)
-def chunk_data(df): #input dataframe
-    chunkCount = len(df.index)//1000 #determining the amount of adjacent chunks that will fit
+def chunk_data(df, chunkSize): #input dataframe
+    chunkCount = len(df.index)//chunkSize #determining the amount of adjacent chunks that will fit
     chunkList = []
     if chunkCount == 1:
-        chunk1 = df.iloc[0:1000]
-        chunk2 = df.iloc[-1000:]
+        chunk1 = df.iloc[0:chunkSize]
+        chunk2 = df.iloc[-chunkSize:]
         chunkList.append(chunk1)
         chunkList.append(chunk2)
         return chunkList
     for i in range(chunkCount-1):
-        tempChunk = df.iloc[i*1000:i*1000+1000] #normal chunks
+        tempChunk = df.iloc[i*chunkSize:i*chunkSize+chunkSize] #normal chunks
         tempChunk.reset_index(drop = True, inplace = True)
         chunkList.append(tempChunk)
-        if i*1000+1500 <= len(df.index):
-            tempChunk = df.iloc[i*1000 + 500:i*1000+1500] #offset chunks
+        if i*chunkSize+chunkSize*1.5 <= len(df.index):
+            tempChunk = df.iloc[i*chunkSize + 0.5*chunkSize:i*chunkSize+chunkSize*1.5] #offset chunks
             tempChunk.reset_index(drop = True, inplace = True)
             chunkList.append(tempChunk)
     return chunkList
