@@ -1,21 +1,35 @@
-import numpy as np
-import pandas as pd
-import pickle
-import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-from scipy.fftpack import fft
-from scipy.signal import find_peaks
-from scipy.signal import welch
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.datasets import make_classification
-from sklearn2pmml import PMMLPipeline
-from sklearn2pmml import sklearn2pmml
+import numpy as np                                  #for feature extraction
+import pandas as pd                                 #for storing data
+import matplotlib.pyplot as plt                     #for visualizing data
+from datetime import datetime, timedelta            #for timestamp storage
+from scipy.fftpack import fft                       #for FFT
+from scipy.signal import find_peaks                 #for peak detection
+from scipy.signal import welch                      #for PSD
+from sklearn.ensemble import RandomForestClassifier #for model creation
+from joblib import dump, load                       #for model storage
+from scipy.signal import butter,filtfilt            #for low pass filter
 
 #import the raw data for accelerometer, gyroscope, and labels
 accelData = pd.read_csv('C:\\Users\\MichaelK\\Documents\\SeniorDesign\\accelerometer_data.txt')
 gyroData = pd.read_csv('C:\\Users\\MichaelK\\Documents\\SeniorDesign\\gyroscope_data.txt')
 labelData = pd.read_csv('C:\\Users\\MichaelK\\Documents\\SeniorDesign\\activity_data.txt', keep_default_na=False)
 
+#Low pass filter at variable frequency
+#inputs - df (dataframe), freq (integer) desired cutoff frequency
+#outputs - dataframe with filtered data
+def lpf(df, freq):
+    samples = df.size
+    startTime = datetime.strptime(df['Time'][0], '%m/%d/%y %H:%M:%S.%f')
+    endTime = datetime.strptime(df['Time'][df.index[-1]], '%m/%d/%y %H:%M:%S.%f')
+    duration = (endTime - startTime).total_seconds()
+    sampleFreq = samples/duration
+    nyq = sampleFreq * 0.5
+    normal_cutoff = freq/nyq
+    print(normal_cutoff)
+    order = 2
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    y = filtfilt(b,a,df['X'])
+    return y
 
 #combines all data into one file, correlating accel and gyro time values and applying a label to every entry
 #inputs - 3 dataframes containing info from accelerometer, gyroscope, and activity
@@ -30,7 +44,6 @@ def combine_data(accelData, gyroData, labelData):
     gyroIndex = 0
     labelIndex = 0
     closeness = timedelta(seconds = 0.05)
-
 
     #Finding the current activity and saving it
     for index, row in accelData.iterrows():
@@ -91,7 +104,7 @@ def chunk_data(df): #input dataframe
         tempChunk.reset_index(drop = True, inplace = True)
         chunkList.append(tempChunk)
         if i*1000+1500 <= len(df.index):
-            tempChunk = df.iloc[i*1000 + 500:i*1000+1500] #offset chunks]
+            tempChunk = df.iloc[i*1000 + 500:i*1000+1500] #offset chunks
             tempChunk.reset_index(drop = True, inplace = True)
             chunkList.append(tempChunk)
     return chunkList
@@ -272,14 +285,7 @@ def get_psd_values(chunk):
 #inputs - col (list)
 #outputs - col (list)
 def jerk_col(col):
-
-    jerkStart = [col[0],col[167],col[333],col[500],col[666],col[833]]
-    jerkEnd = [col[168],col[334],col[501],col[667],col[834],col[999]]
-    jerkOut = np.zeros(6)
-
-    for i in range(6):
-        jerkOut[i] = jerkStart[i]-jerkEnd[i]
-
+    jerkOut = diff(col) #jerk is the derivative of acceleration
     return jerkOut
 
 #uses jerk_col function to find the jerk values for 6 sub chunks of each column in a chunk
@@ -290,8 +296,7 @@ def find_jerk(chunk):
     outData['count'] = [1,2,3,4,5,6] #outputs 6 jerk values for each sensor axis
     for key, value in chunk.iteritems(): #itterating over the chunk's columns
         if key != 'Time' and key != 'Activity':
-            outData[key] = jerk_col(value)
-
+            outData[key] = jerk_col(value) #finding the jerk of each column
     return outData
 
 #finds the amount of zero crossing points for a column of data
@@ -322,6 +327,8 @@ def find_zero_cross(chunk):
 #fins mean of 6 subsections of a column of data
 #inputs - col(array)
 #outputs - meanOut (array) of 6 means
+
+#!!!INCOMPLETE FUNCTION!!!
 def mean_col(col):
     meanSum = np.zeros(6)
     meanCount = np.zeros(6)
@@ -435,9 +442,7 @@ noLabelData = trainingData.drop(['Activity'],axis = 1)
 clf.fit(noLabelData, trainingData['Activity'])
 
 #saving the model to a file
-model = pickle.dumps(clf)
-modelFile = open('seniodDesignModel.txt','wb')
-modelFile.write(model)
+dump(clf,'testmodel.joblib')
 
 #import the test data for accelerometer, gyroscope, and labels
 testAccelData = pd.read_csv('C:\\Users\\Micha\\Documents\\SeniorDesign\\testdata\\accelerometer_data (1).txt')
