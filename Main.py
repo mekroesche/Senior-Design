@@ -407,6 +407,111 @@ def extract_features(dfList):
             outData = outData.append(outInfo,ignore_index = True)
     return outData
 
+
+
+def feature_selection(df):
+    #initializing values
+    featureCount = 0
+    columnList = []
+
+    #getting info from user
+    print('Answer the following questions to determine \nthe features extracted (Y/N):')
+    #breaks out of loop if user enters y or n (not case sensitive) else recurs
+    while(True):
+        fft = input('\nFrequency from Time? ')
+        fft = fft.capitalize()
+        if check_valid(fft):
+            break
+
+    #converts user input to boolean equivelant and modifies feature count if necessary
+    if fft == 'Y':
+        fft = True
+        featureCount += 36
+    else:
+        fft = False
+
+    #repeat for all features
+    while(True):
+        psd = input('\nPower Spectral Density? ')
+        psd = psd.capitalize()
+        if check_valid(psd):
+            break
+
+    if psd == 'Y':
+        psd = True
+        featureCount += 36
+    else:
+        psd = False
+
+    while(True):
+        jrk = input('\nJerk? ')
+        jrk = jrk.capitalize()
+        if check_valid(jrk):
+            break
+
+    if jrk == 'Y':
+        jrk = True
+        featureCount += 36
+    else:
+        jrk = False
+
+    while(True):
+        mean = input('\nMean? ')
+        mean = mean.capitalize()
+        if check_valid(mean):
+            break
+
+    if mean == 'Y':
+        mean = True
+        featureCount += 36
+    else:
+        mean = False
+
+    while(True):
+        zcr = input('\nZero Crossing Rate? ')
+        zcr = zcr.capitalize()
+        if check_valid(zcr):
+            break
+
+    if zcr == 'Y':
+        zcr = True
+        featureCount += 1
+    else:
+        zcr = False
+
+
+    #initializing output dataframe with correct amount of columns
+    for i in range(featureCount):
+        columnList.append('Feature ' + str(i))
+    columnList.append('Activity')
+    outData = pd.DataFrame(columns = columnList)
+
+    #extracting desired features from the data
+    chunkList = chunk_data(df)
+    for chunk in chunkList:
+        if fft:
+            fftData = get_fft_values(chunk)
+        if psd:
+            psdData = get_psd_values(chunk)
+        if jrk:
+            jrkData = find_jerk(chunk)
+        featNum = 0
+        outInfo = {}
+        for key, value in fftData.iteritems():
+            if key != 'Frequency' and key != 'Activity':
+                if fft:
+                    fftPks = peak_detection(fftData, key, 6, 1, False)[0:6]
+                if psd:
+                    psdPks = peak_detection(psdData, key, 6, 1, False)[0:6]
+                if jrk:
+                    jrkPks = peak_detection(jrkData, key, 6, 1, False)[0:6]
+                for j in range(6): #needs fix!
+                    outInfo.update([('Feature '+ str(featNum),fftPks.iloc[j]),('Feature '+str(featNum+1),psdPks.iloc[j])])
+                    featNum += 2
+        outInfo.update([('Activity',chunk['Activity'].iloc[0])])
+        outData = outData.append(outInfo,ignore_index = True)
+    return outData
+
 ###############################################################################
 
 try:
